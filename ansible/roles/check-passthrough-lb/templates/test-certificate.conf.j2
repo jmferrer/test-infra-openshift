@@ -1,0 +1,11 @@
+<VirtualHost *:{{ listening_port }}>
+    ServerName  {{ server_name }}
+{% if server_alias is defined %}
+    ServerAlias {{ server_alias }}
+{% endif %}
+
+    SSLEngine On
+
+    SSLCertificateFile    /etc/pki/tls/certs/server-lb.crt
+    SSLCertificateKeyFile /etc/pki/tls/private/server-lb.key
+</VirtualHost>

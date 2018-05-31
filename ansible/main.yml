@@ -1,0 +1,31 @@
+- hosts: masters
+  gather_facts: True
+  any_errors_fatal: true
+
+- hosts: nodes
+  gather_facts: True
+  any_errors_fatal: true
+
+#- hosts: all
+#  roles:
+#    - check-dns
+
+- hosts: masters
+  vars:
+    listening_port: "{{ openshift_master_api_port }}"
+    server_name: "{{ openshift_master_cluster_hostname }}"
+    server_alias: "{{ openshift_master_cluster_public_hostname }}"
+  roles:
+    - check-passthrough-lb
+  tags:
+    - masters
+
+- hosts: nodes
+  vars:
+    listening_port: "443"
+    server_name: "app.{{ openshift_master_default_subdomain }}"
+    limit_region: "infra"
+  roles:
+    - check-passthrough-lb
+  tags:
+    - infra

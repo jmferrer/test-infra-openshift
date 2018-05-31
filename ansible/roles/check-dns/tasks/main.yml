@@ -1,0 +1,37 @@
+- name: install bind-utils
+  package:
+    name: bind-utils
+
+- name: check mandatory hosts exists in DNS
+  shell: |
+    host {{ item }} $((grep "^nameserver" /etc/resolv.conf | head -n 1 | awk '{print $2}')) | grep NXDOMAIN | wc -l
+  register: doesnotexists
+  with_items:
+    - "{{ openshift_master_cluster_public_hostname }}"
+    - "{{ openshift_master_cluster_hostname }}"
+    - "testa.{{ openshift_master_default_subdomain }}"
+    - "testb.{{ openshift_master_default_subdomain }}"
+  failed_when: "'1' in doesnotexists.stdout"
+  changed_when: false
+
+- name: check openshift_metrics_hawkular_hostname if defined
+  shell: |
+    host {{ openshift_metrics_hawkular_hostname }} | grep NXDOMAIN | wc -l
+  register: doesnotexists
+  failed_when: "'1' in doesnotexists.stdout"
+  changed_when: false
+  when: openshift_metrics_hawkular_hostname is defined
+
+- name: check openshift_logging_kibana_hostname if defined
+  shell: |
+    host {{ openshift_logging_kibana_hostname }} | grep NXDOMAIN | wc -l
+  register: doesnotexists
+  failed_when: "'1' in doesnotexists.stdout"
+  changed_when: false
+  when: openshift_logging_kibana_hostname is defined
+
+
+- name: uninstall bind-utils
+  package:
+    name: bind-utils
+    state: absent

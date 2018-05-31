@@ -1,0 +1,159 @@
+- name: install pyOpenSSL
+  local_action:
+    module: package
+    name: pyOpenSSL
+  become: yes
+
+- name: create key
+  local_action:
+    module: openssl_privatekey
+    path: "/tmp/server-lb.key"
+
+# Needs PyOpenSSL>=0.15 . Creating a virtualenv in a restricted environment is
+# not an alternative :,(
+# - name: create csr
+#   local_action:
+#     module: openssl_csr
+#     path: "/tmp/master-lb.csr"
+#     privatekey_path: "/tmp/master-lb.key"
+#     common_name: "{{ openshift_master_cluster_hostname }}"
+#     subject_alt_name: "DNS:{{ openshift_master_cluster_public_hostname }}"
+- name: create csr
+  local_action:
+    module: |
+      shell openssl req -new -key /tmp/server-lb.key -out /tmp/server-lb.csr \
+      -subj "/C=ES/ST=ES/L=Sys/O=Paradigma/OU=PD/CN={{ server_name }}"
+
+# Same problem than above
+# - name: create certificate
+#   local_action:
+#     module: openssl_certificate
+#     path: "/tmp/master-lb.crt"
+#     privatekey_path: "/tmp/master-lb.key"
+#     csr_path: "/tmp/master-lb.csr"
+#     provider: selfsigned
+- name: create crt
+  local_action:
+    module: |
+      shell openssl x509 -req -days 366 -in /tmp/server-lb.csr \
+      -signkey /tmp/master-lb.key -out /tmp/master-lb.crt
+
+- name: send key to servers
+  copy:
+    src: "/tmp/master-lb.key"
+    dest: "/etc/pki/tls/private/server-lb.key"
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- name: send certificate to servers
+  copy:
+    src: "/tmp/master-lb.crt"
+    dest: "/etc/pki/tls/certs/server-lb.crt"
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- name: install httpd
+  package:
+    name: "{{ item }}"
+  with_items:
+    - httpd
+    - mod_ssl
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- name: configure VirtualHost
+  template:
+    src: test-certificate.conf.j2
+    dest: /etc/httpd/conf.d/test-certificate.conf
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- name: restart httpd
+  service:
+    name: httpd
+    state: restarted
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- debug:
+    msg: "{{ ansible_host }}"
+
+- name: Wait until httpd is started
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: "{{ listening_port }}"
+    delay: 2
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- name: Open non permanently port in os firewall
+  shell: |
+    iptables -A INPUT -p tcp -m tcp --dport {{ listening_port }} -j ACCEPT
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- name: Wait until balancer port is open
+  wait_for:
+    host: "{{ server_name }}"
+    port: "{{ listening_port }}"
+    delay: 40
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- name: THIS IS THE KEY STEP .. CHECK SERVICE LB !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  shell: |
+    curl --cacert /etc/pki/tls/certs/server-lb.crt https://{{ server_name }}:{{ listening_port }}
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- name: remove Virtualhost and certificates
+  file:
+    name: "{{ item }}"
+    state: absent
+  with_items:
+    - "/etc/httpd/conf.d/test-certificate.conf"
+    - "/etc/pki/tls/certs/server-lb.crt"
+    - "/etc/pki/tls/private/server-lb.key"
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- name: uninstall httpd
+  package:
+    name: "{{ item }}"
+    state: absent
+  with_items:
+    - httpd
+    - mod_ssl
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)
+
+- name: uninstall pyopenssl package
+  package:
+    name: pyOpenSSL
+    state: absent
+  when: limit_region is undefined or
+        (limit_region is defined and
+         openshift_node_labels is defined and
+         limit_region == openshift_node_labels.region)

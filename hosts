@@ -1,0 +1,124 @@
+# Create an OSEv3 group that contains the master, nodes, etcd, and lb groups.
+# The lb group lets Ansible configure HAProxy as the load balancing solution.
+# Comment lb out if your load balancer is pre-configured.
+[OSEv3:children]
+masters
+nodes
+etcd
+#glusterfs
+#cloudforms
+new_nodes
+
+# Set variables common for all OSEv3 hosts
+[OSEv3:vars]
+openshift_deployment_type=openshift-enterprise
+ansible_ssh_user=centos
+ansible_become=true
+ansible_become_user=root
+
+# Enable service catalog
+openshift_enable_service_catalog=false
+
+# Enable template service broker (requires service catalog to be enabled, above)
+template_service_broker_install=false
+
+# Install examples
+openshift_install_examples=false
+
+# Uncomment the following to enable htpasswd authentication; defaults to
+# DenyAllPasswordIdentityProvider.
+#openshift_master_identity_providers=[{'name': 'htpasswd_auth', 'login':'true', 'challenge': 'true', 'kind': 'HTPasswdPasswordIdentityProvider','filename': '/etc/origin/master/htpasswd'}]
+openshift_master_identity_providers=[{'name': 'ldap', 'challenge': 'true', 'login': 'true', 'mappingMethod': 'claim', 'kind': 'LDAPPasswordIdentityProvider', 'attributes': {'id': ['dn'], 'email': ['mail'], 'name': ['cn'], 'preferredUsername': ['uid']}, 'bindDN': 'cn=Manager,dc=paradigmatecnologico,dc=com', 'bindPassword': '*********', 'ca': '', 'insecure': 'true', 'url': 'ldap://ldap2.paradigmatecnologico.com:389/ou=Users,dc=paradigmatecnologico,dc=com'},{'challenge': 'true', 'filename': '/etc/origin/master/htpasswd', 'login': 'true', 'kind': 'HTPasswdPasswordIdentityProvider', 'name': 'htpasswd_auth'}]
+openshift_master_manage_htpasswd=true
+openshift_master_htpasswd_users={'admin':'$apr1$FzYt5RoB$L/3Mma4c.zVptzMlOSGt31'}
+
+# Native high availability cluster method with optional load balancer.
+# If no lb group is defined installer assumes that a load balancer has
+# been preconfigured. For installation the value of
+# openshift_master_cluster_hostname must resolve to the load balancer
+# or to one or all of the masters defined in the inventory if no load
+# balancer is present.
+openshift_master_cluster_method=native
+openshift_master_cluster_hostname=openshift-api-test.ostest.os.paradigmadigital.com
+openshift_master_cluster_public_hostname=openshift-test.ostest.os.paradigmadigital.com
+openshift_master_api_port=443
+openshift_master_console_port=443
+
+openshift_portal_net=172.20.0.0/16
+osm_cluster_network_cidr=172.21.0.0/16
+
+openshift_disable_check=memory_availability,disk_availability,docker_storage
+
+openshift_metrics_install_metrics=false
+openshift_metrics_hawkular_hostname=hawkular-metrics.osapps.ostest.os.paradigmadigital.com
+
+openshift_logging_install_logging=false
+openshift_logging_kibana_hostname=kibana.osapps.ostest.os.paradigmadigital.com
+
+# Configure OVS plugin
+os_sdn_network_plugin_name=redhat/openshift-ovs-multitenant
+
+openshift_docker_additional_registries=registry.paradigmadigital.com
+openshift_docker_insecure_registries=registry.paradigmadigital.com
+
+# router
+openshift_master_default_subdomain=osapps.ostest.os.paradigmadigital.com
+openshift_hosted_router_replicas=3
+openshift_router_selector='region=infra'
+
+# Registry
+#openshift_hosted_registry_replicas=3
+#openshift_hosted_registry_selector='region=infra'
+
+# apply updated node defaults
+openshift_node_kubelet_args={'pods-per-core': ['10'], 'max-pods': ['250'], 'image-gc-high-threshold': ['90'], 'image-gc-low-threshold': ['80']}
+
+# enable ntp on masters to ensure proper failover
+openshift_clock_enabled=true
+
+# Configure `nodeIP` in the node config. This is needed in cases where node traffic is desired to go over an interface other than the default network interface.
+#openshift_set_node_ip=True
+
+# Select default nodes for projects
+osm_default_node_selector="region=app"
+
+# host group for masters
+[masters]
+openshift-master-1.ostest.os.paradigmadigital.com
+openshift-master-2.ostest.os.paradigmadigital.com
+openshift-master-3.ostest.os.paradigmadigital.com
+
+# host group for etcd
+[etcd]
+openshift-master-1.ostest.os.paradigmadigital.com
+openshift-master-2.ostest.os.paradigmadigital.com
+openshift-master-3.ostest.os.paradigmadigital.com
+
+# host group for nodes, includes region info
+[nodes]
+# masters
+openshift-master-1.ostest.os.paradigmadigital.com
+openshift-master-2.ostest.os.paradigmadigital.com
+openshift-master-3.ostest.os.paradigmadigital.com
+
+# infra
+openshift-infra-1.ostest.os.paradigmadigital.com openshift_node_labels="{'region': 'infra', 'zone': 'zone1'}"
+openshift-infra-2.ostest.os.paradigmadigital.com openshift_node_labels="{'region': 'infra', 'zone': 'zone2'}"
+openshift-infra-3.ostest.os.paradigmadigital.com openshift_node_labels="{'region': 'infra', 'zone': 'zone3'}"
+
+# app
+openshift-app-1.ostest.os.paradigmadigital.com openshift_node_labels="{'region': 'app', 'zone': 'zone1', 'dev': 'true'}"
+openshift-app-2.ostest.os.paradigmadigital.com openshift_node_labels="{'region': 'app', 'zone': 'zone2', 'dev': 'true'}"
+openshift-app-3.ostest.os.paradigmadigital.com openshift_node_labels="{'region': 'app', 'zone': 'zone3', 'dev': 'true'}"
+
+# glusterfs
+openshift-gluster-1.ostest.os.paradigmadigital.com openshift_node_labels="{'region': 'storage', 'zone': 'zone1'}"
+openshift-gluster-2.ostest.os.paradigmadigital.com openshift_node_labels="{'region': 'storage', 'zone': 'zone2'}"
+openshift-gluster-3.ostest.os.paradigmadigital.com openshift_node_labels="{'region': 'storage', 'zone': 'zone3'}"
+
+#[glusterfs]
+openshift-gluster-1.ostest.os.paradigmadigital.com glusterfs_devices='[ "/dev/vdc", "/dev/vdd" ]'
+openshift-gluster-2.ostest.os.paradigmadigital.com glusterfs_devices='[ "/dev/vdc", "/dev/vdd" ]'
+openshift-gluster-3.ostest.os.paradigmadigital.com glusterfs_devices='[ "/dev/vdc", "/dev/vdd" ]'
+
+[new_nodes]

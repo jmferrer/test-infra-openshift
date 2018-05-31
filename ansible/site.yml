@@ -1,0 +1,11 @@
+- hosts: masters
+  gather_facts: True
+  any_errors_fatal: true
+
+- hosts: nodes
+  gather_facts: True
+  any_errors_fatal: true
+
+- hosts: all
+  roles:
+    - check-dns
